@@ -88,14 +88,17 @@ def buy_package():
         logging.error(f"Exception occurred: {e}")
         return jsonify(success=False, message=str(e))
 
-
-# Function to add user to MikroTik
+ #add user
 def add_user_to_mikrotik(phone_number, package):
     """Connects to MikroTik and adds user to Hotspot"""
     try:
-        # Connect to MikroTik Router
+        logging.info(f"Connecting to MikroTik at {MIKROTIK_HOST}...")
+        
         connection = routeros_api.RouterOsApiPool(
-            MIKROTIK_HOST, username=MIKROTIK_USERNAME, password=MIKROTIK_PASSWORD, plaintext_login=True
+            MIKROTIK_HOST, 
+            username=MIKROTIK_USERNAME, 
+            password=MIKROTIK_PASSWORD, 
+            plaintext_login=True
         )
         api = connection.get_api()
 
@@ -107,7 +110,7 @@ def add_user_to_mikrotik(phone_number, package):
         # Check if user already exists
         users_resource = api.get_resource('/ip/hotspot/user')
         existing_users = users_resource.get(name=username)
-        
+
         if existing_users:
             logging.warning(f"User {username} already exists in MikroTik.")
         else:
@@ -123,9 +126,15 @@ def add_user_to_mikrotik(phone_number, package):
         connection.disconnect()
         return True
 
+    except routeros_api.exceptions.RouterOsApiConnectionError:
+        logging.error("Failed to connect to MikroTik. Check network, firewall, or API settings.")
+    except routeros_api.exceptions.RouterOsApiCommunicationError:
+        logging.error("Communication error with MikroTik API.")
     except Exception as e:
-        logging.error(f"Error adding user to MikroTik: {e}")
-        return False
+        logging.error(f"Unexpected error adding user to MikroTik: {e}")
+
+    return False
+
 
 
 # Route to handle Payhero payment confirmation callback
