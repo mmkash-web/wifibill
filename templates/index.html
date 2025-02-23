@@ -283,6 +283,7 @@
             const phoneNumber = document.getElementById("phoneNumber").value;
             const packageName = document.getElementById("packageName").value;
             const amount = parseFloat(document.getElementById("amount").value);
+            const macAddress = document.getElementById("macAddress").value;
 
             if (phoneNumber) {
                 fetch('/api/buy', {
@@ -290,7 +291,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ packageName, amount, phoneNumber })
+                    body: JSON.stringify({ packageName, amount, phoneNumber, macAddress })
                 })
                 .then(response => response.json())
                 .then(data => {
@@ -333,6 +334,12 @@
 
         // Loader script
         window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const macAddress = urlParams.get('mac');
+            if (macAddress) {
+                document.getElementById('macAddress').value = macAddress;
+            }
+
             setTimeout(function() {
                 const loader = document.querySelector('.loader');
                 loader.style.display = 'none';
@@ -417,13 +424,5 @@
             <div class="modal-header">Enter Phone Number</div>
             <div class="modal-body">
                 <input type="text" id="phoneNumber" class="input-box" placeholder="Phone Number">
-                <input type="hidden" id="packageName">
-                <input type="hidden" id="amount">
-            </div>
-            <div class="modal-footer">
-                <button class="surf-btn" onclick="submitPhoneNumber()">Submit</button>
-            </div>
-        </div>
-    </div>
-
-   
+                <input type="hidden" id="macAddress">
+                <input type="hidden"
