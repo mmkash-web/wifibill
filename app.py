@@ -3,7 +3,7 @@ import base64
 import requests
 import logging
 import routeros_api  # MikroTik API
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, url_for
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -44,10 +44,10 @@ data_packages = {
     'data_6': ('1 MONTH UNLIMITED', 300)
 }
 
-# Route to display the main page
+# Route to display the captive portal page
 @app.route('/')
 def index():
-    return render_template('index.html', data_packages=data_packages)
+    return render_template('captive_portal.html', data_packages=data_packages)
 
 # Route to handle package purchase
 @app.route('/api/buy', methods=['POST'])
@@ -56,6 +56,7 @@ def buy_package():
     package_name = data.get('packageName')
     amount = float(data.get('amount', 0))
     phone_number = data.get('phoneNumber')
+    mac_address = data.get('macAddress')
 
     if not package_name or not phone_number or amount <= 0:
         return jsonify(success=False, message="Invalid request data.")
@@ -67,7 +68,7 @@ def buy_package():
         "channel_id": 852,
         "provider": "m-pesa",
         "external_reference": "INV-009",
-        "callback_url": "https://wifipay-f445b267e0c4.herokuapp.com/payhero-callback"
+        "callback_url": url_for('payhero_callback', _external=True)
     }
     headers = {"Authorization": basic_auth_token}
 
@@ -81,6 +82,11 @@ def buy_package():
         logging.info(f"Response JSON: {response_json}")
 
         if response.status_code in [200, 201] and response_json.get('success'):
+            # Save the MAC address and package name for the callback
+            app.config['pending_payment'] = {
+                'mac_address': mac_address,
+                'package_name': package_name
+            }
             return jsonify(success=True, message="STK push sent successfully.")
         else:
             message = response_json.get('error_message', 'Unknown error')
@@ -93,29 +99,31 @@ def buy_package():
 
 
 # Function to add user to MikroTik
-def add_user_to_mikrotik(phone_number, package):
-    """Connects to MikroTik and adds user to Hotspot"""
+def add_user_to_mikrotik(mac_address, package):
+    """Connects to MikroTik and adds user to Hotspot using MAC address as username and password"""
     try:
+        logging.info(f"Connecting to MikroTik at {MIKROTIK_HOST} ...")
         connection = routeros_api.RouterOsApiPool(
             MIKROTIK_HOST, username=MIKROTIK_USERNAME, password=MIKROTIK_PASSWORD, plaintext_login=True
         )
         api = connection.get_api()
 
-        username = phone_number
-        password = phone_number[-4:]  # Last 4 digits as password
-        profile = package.replace(" ", "_")
-
+        # Add user to MikroTik Hotspot using MAC address
         api.get_resource('/ip/hotspot/user').add(
-            name=username,
-            password=password,
-            profile=profile,
-            comment=f"Auto-added {package}"
+            name=mac_address,
+            password=mac_address,
+            profile=package.replace(" ", "_"),
+            comment=f"Auto-added {mac_address}"
         )
 
-        logging.info(f"User {username} added to MikroTik with package {package}")
+        logging.info(f"User {mac_address} added to MikroTik with package {package}")
         connection.disconnect()
         return True
 
+    except routeros_api.exceptions.RouterOsApiConnectionError as e:
+        logging.error("Failed to connect to MikroTik. Check network, firewall, or API settings.")
+        logging.error(f"Connection Error: {e}")
+        return False
     except Exception as e:
         logging.error(f"Error adding user to MikroTik: {e}")
         return False
@@ -129,32 +137,26 @@ def payhero_callback():
     logging.info(f"Received Payhero callback: {data}")
 
     status = data.get('status')
-    response_data = data.get('response', {})
-    amount = response_data.get('Amount')
-    phone_number = response_data.get('Source')
+    amount = data.get('amount')
+    phone_number = data.get('phone_number')
 
-    if amount is None or phone_number is None:
-        logging.error("Invalid callback data: Missing amount or phone number.")
-        return jsonify(success=False, message="Invalid callback data.")
+    pending_payment = app.config.get('pending_payment')
+    if not pending_payment:
+        logging.error("No pending payment found.")
+        return jsonify(success=False, message="No pending payment found.")
 
-    package_name = None
-    for key, value in data_packages.items():
-        if value[1] == amount:
-            package_name = value[0]
-            break
+    mac_address = pending_payment['mac_address']
+    package_name = pending_payment['package_name']
 
-    if not package_name:
-        logging.error(f"No matching package for amount: {amount}")
-        return jsonify(success=False, message="Invalid package.")
-
-    if status:
+    if status == "SUCCESS":
         logging.info(f"Payment successful for {phone_number}, package: {package_name}")
 
-        if add_user_to_mikrotik(phone_number, package_name):
+        # Add user to MikroTik Hotspot
+        if add_user_to_mikrotik(mac_address, package_name):
             return jsonify(success=True, message="User activated successfully.")
         else:
             return jsonify(success=False, message="MikroTik activation failed.")
-    
+
     else:
         logging.error(f"Payment failed for {phone_number}, status: {status}")
         return jsonify(success=False, message="Payment verification failed.")
