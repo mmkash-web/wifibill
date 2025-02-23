@@ -123,26 +123,14 @@ def add_user_to_mikrotik(phone_number, package):
 def payhero_callback():
     """Handle Payhero payment confirmation."""
     data = request.json
-    logging.info(f"Received Payhero callback: {data}")  # Log full payload
+    logging.info(f"Received Payhero callback: {data}")
 
     status = data.get('status')
     amount = data.get('amount')
     phone_number = data.get('phone_number')
 
-    # Debugging: Check if amount is missing
-    if amount is None:
-        logging.error(f"Missing amount in callback: {data}")
-        return jsonify(success=False, message="Invalid amount received."), 400
-
-    # Ensure amount is an integer (convert if necessary)
-    try:
-        amount = int(amount)
-    except ValueError:
-        logging.error(f"Invalid amount format: {amount}")
-        return jsonify(success=False, message="Invalid amount format."), 400
-
     # Find package by amount
-    package_name = packages.get(amount)
+    package_name = packages.get(amount, None)
 
     if not package_name:
         logging.error(f"No matching package for amount: {amount}")
@@ -161,3 +149,5 @@ def payhero_callback():
         logging.error(f"Payment failed for {phone_number}, status: {status}")
         return jsonify(success=False, message="Payment verification failed.")
 
+if __name__ == '__main__':
+    app.run(debug=True)
