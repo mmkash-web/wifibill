@@ -2,6 +2,7 @@ import os
 import base64
 import requests
 import logging
+import routeros_api  # MikroTik API
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 
@@ -19,9 +20,14 @@ logging.basicConfig(level=logging.INFO)
 API_USERNAME = os.getenv('API_USERNAME')
 API_PASSWORD = os.getenv('API_PASSWORD')
 
-# Check that environment variables are set
-if not all([API_USERNAME, API_PASSWORD]):
-    raise EnvironmentError("Required environment variables are not set.")
+# MikroTik Credentials
+MIKROTIK_HOST = os.getenv('MIKROTIK_HOST')
+MIKROTIK_USERNAME = os.getenv('MIKROTIK_USERNAME')
+MIKROTIK_PASSWORD = os.getenv('MIKROTIK_PASSWORD')
+
+# Check that required variables are set
+if not all([API_USERNAME, API_PASSWORD, MIKROTIK_HOST, MIKROTIK_USERNAME, MIKROTIK_PASSWORD]):
+    raise EnvironmentError("Required environment variables are missing.")
 
 # Create Basic Auth token
 credentials = f"{API_USERNAME}:{API_PASSWORD}"
@@ -58,7 +64,7 @@ def buy_package():
         "channel_id": 852,
         "provider": "m-pesa",
         "external_reference": "INV-009",
-        "callback_url": "https://softcash.co.ke/billing/callbackurl.php"
+        "callback_url": "https://wifipay-f445b267e0c4.herokuapp.com/payhero-callback"  # Change to your actual domain
     }
     headers = {"Authorization": basic_auth_token}
 
@@ -72,7 +78,7 @@ def buy_package():
         logging.info(f"Response JSON: {response_json}")
 
         if response.status_code in [200, 201] and response_json.get('success'):
-            return jsonify(success=True)
+            return jsonify(success=True, message="STK push sent successfully.")
         else:
             message = response_json.get('error_message', 'Unknown error')
             logging.error(f"Payment failed: {message}")
@@ -81,6 +87,75 @@ def buy_package():
     except Exception as e:
         logging.error(f"Exception occurred: {e}")
         return jsonify(success=False, message=str(e))
+
+
+# Function to add user to MikroTik
+def add_user_to_mikrotik(phone_number, package):
+    """Connects to MikroTik and adds user to Hotspot"""
+    try:
+        # Connect to MikroTik Router
+        connection = routeros_api.RouterOsApiPool(
+            MIKROTIK_HOST, username=MIKROTIK_USERNAME, password=MIKROTIK_PASSWORD, plaintext_login=True
+        )
+        api = connection.get_api()
+
+        # Convert phone number to username
+        username = phone_number
+        password = phone_number[-4:]  # Last 4 digits as password
+        profile = package.replace(" ", "_")  # Use package name for profile
+
+        # Add user to MikroTik Hotspot
+        api.get_resource('/ip/hotspot/user').add(
+            name=username,
+            password=password,
+            profile=profile,
+            comment=f"Auto-added {package}"
+        )
+
+        logging.info(f"User {username} added to MikroTik with package {package}")
+        connection.disconnect()
+        return True
+
+    except Exception as e:
+        logging.error(f"Error adding user to MikroTik: {e}")
+        return False
+
+
+# Route to handle Payhero payment confirmation callback
+@app.route('/payhero-callback', methods=['POST'])
+def payhero_callback():
+    """Handle Payhero payment confirmation."""
+    data = request.json
+    logging.info(f"Received Payhero callback: {data}")
+
+    status = data.get('status')
+    amount = data.get('amount')
+    phone_number = data.get('phone_number')
+
+    # Find package by amount
+    package_name = None
+    for key, value in data_packages.items():
+        if value[1] == amount:
+            package_name = value[0]
+            break
+
+    if not package_name:
+        logging.error(f"No matching package for amount: {amount}")
+        return jsonify(success=False, message="Invalid package.")
+
+    if status == "SUCCESS":
+        logging.info(f"Payment successful for {phone_number}, package: {package_name}")
+
+        # Add user to MikroTik Hotspot
+        if add_user_to_mikrotik(phone_number, package_name):
+            return jsonify(success=True, message="User activated successfully.")
+        else:
+            return jsonify(success=False, message="MikroTik activation failed.")
+
+    else:
+        logging.error(f"Payment failed for {phone_number}, status: {status}")
+        return jsonify(success=False, message="Payment verification failed.")
+
 
 if __name__ == '__main__':
     app.run(debug=True)
