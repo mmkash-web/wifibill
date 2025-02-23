@@ -35,25 +35,24 @@ encoded_credentials = base64.b64encode(credentials.encode()).decode()
 basic_auth_token = f"Basic {encoded_credentials}"
 
 # Define available packages
-data_packages = {
-    'data_1': ('2 HOURS UNLIMITED', 5),
-    'data_2': ('12 HOURS UNLIMITED', 15),
-    'data_3': ('24 HOURS UNLIMITED', 20),
-    'data_4': ('4 DAYS UNLIMITED', 50),
-    'data_5': ('8 DAYS UNLIMITED', 100),
-    'data_6': ('1 MONTH UNLIMITED', 300)
+packages = {
+    5: "2 HOURS UNLIMITED",
+    15: "12 HOURS UNLIMITED",
+    20: "24 HOURS UNLIMITED",
+    50: "4 DAYS UNLIMITED",
+    100: "8 DAYS UNLIMITED",
+    300: "1 MONTH UNLIMITED"
 }
 
 # Route to display the main page
 @app.route('/')
 def index():
-    return render_template('index.html', data_packages=data_packages)
+    return render_template('index.html', packages=packages)
 
 # Route to handle package purchase
 @app.route('/api/buy', methods=['POST'])
 def buy_package():
     data = request.json
-    package_name = data['packageName']
     amount = float(data['amount'])
     phone_number = data['phoneNumber']
 
@@ -88,7 +87,6 @@ def buy_package():
         logging.error(f"Exception occurred: {e}")
         return jsonify(success=False, message=str(e))
 
-
 # Function to add user to MikroTik
 def add_user_to_mikrotik(phone_number, package):
     """Connects to MikroTik and adds user to Hotspot"""
@@ -120,7 +118,6 @@ def add_user_to_mikrotik(phone_number, package):
         logging.error(f"Error adding user to MikroTik: {e}")
         return False
 
-
 # Route to handle Payhero payment confirmation callback
 @app.route('/payhero-callback', methods=['POST'])
 def payhero_callback():
@@ -133,11 +130,7 @@ def payhero_callback():
     phone_number = data.get('phone_number')
 
     # Find package by amount
-    package_name = None
-    for key, value in data_packages.items():
-        if value[1] == amount:
-            package_name = value[0]
-            break
+    package_name = packages.get(amount, None)
 
     if not package_name:
         logging.error(f"No matching package for amount: {amount}")
@@ -155,7 +148,6 @@ def payhero_callback():
     else:
         logging.error(f"Payment failed for {phone_number}, status: {status}")
         return jsonify(success=False, message="Payment verification failed.")
-
 
 if __name__ == '__main__':
     app.run(debug=True)
