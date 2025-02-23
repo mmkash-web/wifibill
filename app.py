@@ -135,9 +135,14 @@ def payhero_callback():
     data = request.json
     logging.info(f"Received Payhero callback: {data}")
 
-    status = data.get('status')
-    amount = data.get('amount')
-    phone_number = data.get('phone_number')
+    # Extract necessary fields safely
+    response_data = data.get('response', {})
+    amount = response_data.get('Amount')
+    phone_number = response_data.get('Source')  # Assuming "Source" is the phone number
+
+    if amount is None or phone_number is None:
+        logging.error(f"Missing required fields in Payhero response: {data}")
+        return jsonify(success=False, message="Invalid callback data.")
 
     # Find package by amount
     package_name = None
@@ -150,7 +155,7 @@ def payhero_callback():
         logging.error(f"No matching package for amount: {amount}")
         return jsonify(success=False, message="Invalid package.")
 
-    if status == "SUCCESS":
+    if data.get('status') is True:
         logging.info(f"Payment successful for {phone_number}, package: {package_name}")
 
         # Add user to MikroTik Hotspot
@@ -160,9 +165,5 @@ def payhero_callback():
             return jsonify(success=False, message="MikroTik activation failed.")
 
     else:
-        logging.error(f"Payment failed for {phone_number}, status: {status}")
+        logging.error(f"Payment failed for {phone_number}, status: {data.get('status')}")
         return jsonify(success=False, message="Payment verification failed.")
-
-
-if __name__ == '__main__':
-    app.run(debug=True)
