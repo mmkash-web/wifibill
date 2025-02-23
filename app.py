@@ -88,17 +88,14 @@ def buy_package():
         logging.error(f"Exception occurred: {e}")
         return jsonify(success=False, message=str(e))
 
- #add user
+
+# Function to add user to MikroTik
 def add_user_to_mikrotik(phone_number, package):
     """Connects to MikroTik and adds user to Hotspot"""
     try:
-        logging.info(f"Connecting to MikroTik at {MIKROTIK_HOST}...")
-        
+        logging.info(f"Connecting to MikroTik at {MIKROTIK_HOST} ...")
         connection = routeros_api.RouterOsApiPool(
-            MIKROTIK_HOST, 
-            username=MIKROTIK_USERNAME, 
-            password=MIKROTIK_PASSWORD, 
-            plaintext_login=True
+            MIKROTIK_HOST, username=MIKROTIK_USERNAME, password=MIKROTIK_PASSWORD, plaintext_login=True
         )
         api = connection.get_api()
 
@@ -107,34 +104,25 @@ def add_user_to_mikrotik(phone_number, package):
         password = phone_number[-4:]  # Last 4 digits as password
         profile = package.replace(" ", "_")  # Use package name for profile
 
-        # Check if user already exists
-        users_resource = api.get_resource('/ip/hotspot/user')
-        existing_users = users_resource.get(name=username)
+        # Add user to MikroTik Hotspot
+        api.get_resource('/ip/hotspot/user').add(
+            name=username,
+            password=password,
+            profile=profile,
+            comment=f"Auto-added {package}"
+        )
 
-        if existing_users:
-            logging.warning(f"User {username} already exists in MikroTik.")
-        else:
-            # Add user to MikroTik Hotspot
-            users_resource.add(
-                name=username,
-                password=password,
-                profile=profile,
-                comment=f"Auto-added {package}"
-            )
-            logging.info(f"User {username} added to MikroTik with package {package}")
-
+        logging.info(f"User {username} added to MikroTik with package {package}")
         connection.disconnect()
         return True
 
-    except routeros_api.exceptions.RouterOsApiConnectionError:
+    except routeros_api.exceptions.RouterOsApiConnectionError as e:
         logging.error("Failed to connect to MikroTik. Check network, firewall, or API settings.")
-    except routeros_api.exceptions.RouterOsApiCommunicationError:
-        logging.error("Communication error with MikroTik API.")
+        logging.error(f"Connection Error: {e}")
+        return False
     except Exception as e:
-        logging.error(f"Unexpected error adding user to MikroTik: {e}")
-
-    return False
-
+        logging.error(f"Error adding user to MikroTik: {e}")
+        return False
 
 
 # Route to handle Payhero payment confirmation callback
@@ -144,14 +132,14 @@ def payhero_callback():
     data = request.json
     logging.info(f"Received Payhero callback: {data}")
 
-    # Extract necessary fields safely
-    response_data = data.get('response', {})
-    amount = response_data.get('Amount')
-    phone_number = response_data.get('Source')  # Assuming "Source" is the phone number
+    # Check for required fields in Payhero response
+    if not all(key in data for key in ('status', 'amount', 'phone_number')):
+        logging.error("Missing required fields in Payhero response")
+        return jsonify(success=False, message="Missing required fields in Payhero response")
 
-    if amount is None or phone_number is None:
-        logging.error(f"Missing required fields in Payhero response: {data}")
-        return jsonify(success=False, message="Invalid callback data.")
+    status = data.get('status')
+    amount = data.get('amount')
+    phone_number = data.get('phone_number')
 
     # Find package by amount
     package_name = None
@@ -164,7 +152,7 @@ def payhero_callback():
         logging.error(f"No matching package for amount: {amount}")
         return jsonify(success=False, message="Invalid package.")
 
-    if data.get('status') is True:
+    if status == "SUCCESS":
         logging.info(f"Payment successful for {phone_number}, package: {package_name}")
 
         # Add user to MikroTik Hotspot
@@ -174,5 +162,9 @@ def payhero_callback():
             return jsonify(success=False, message="MikroTik activation failed.")
 
     else:
-        logging.error(f"Payment failed for {phone_number}, status: {data.get('status')}")
+        logging.error(f"Payment failed for {phone_number}, status: {status}")
         return jsonify(success=False, message="Payment verification failed.")
+
+
+if __name__ == '__main__':
+    app.run(debug=True)
