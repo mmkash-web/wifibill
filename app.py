@@ -82,7 +82,8 @@ def buy_package():
             # Save the MAC address and package name for the callback
             app.config['pending_payment'] = {
                 'mac_address': mac_address,
-                'package_name': package_name
+                'package_name': package_name,
+                'phone_number': phone_number
             }
             return jsonify(success=True, message="STK push sent successfully.")
         else:
@@ -134,8 +135,9 @@ def payhero_callback():
     logging.info(f"Received Payhero callback: {data}")
 
     status = data.get('status')
-    amount = data.get('amount')
-    phone_number = data.get('phone_number')
+    response = data.get('response', {})
+    phone_number = response.get('Source')
+    amount = response.get('Amount')
 
     pending_payment = app.config.get('pending_payment')
     if not pending_payment:
@@ -145,7 +147,7 @@ def payhero_callback():
     mac_address = pending_payment['mac_address']
     package_name = pending_payment['package_name']
 
-    if status == "SUCCESS":
+    if status and phone_number == pending_payment['phone_number']:
         logging.info(f"Payment successful for {phone_number}, package: {package_name}")
 
         # Add user to MikroTik Hotspot
@@ -153,9 +155,8 @@ def payhero_callback():
             return jsonify(success=True, message="User activated successfully.")
         else:
             return jsonify(success=False, message="MikroTik activation failed.")
-
     else:
-        logging.error(f"Payment failed for {phone_number}, status: {status}")
+        logging.error(f"Payment verification failed for {phone_number}, status: {status}")
         return jsonify(success=False, message="Payment verification failed.")
 
 
