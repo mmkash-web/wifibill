@@ -3,7 +3,7 @@ import base64
 import requests
 import logging
 import routeros_api  # MikroTik API
-from flask import Flask, render_template, request, jsonify, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -52,14 +52,11 @@ def index():
 # Route to handle package purchase
 @app.route('/api/buy', methods=['POST'])
 def buy_package():
-    data = request.json
-    package_name = data.get('packageName')
-    amount = float(data.get('amount', 0))
-    phone_number = data.get('phoneNumber')
-    mac_address = data.get('macAddress')
-
-    if not package_name or not phone_number or amount <= 0:
-        return jsonify(success=False, message="Invalid request data.")
+    data = request.form
+    package_name = data['packageName']
+    amount = float(data_packages[package_name][1])
+    phone_number = data['phoneNumber']
+    mac_address = data['macAddress']
 
     stk_push_url = "https://backend.payhero.co.ke/api/v2/payments"
     payload = {
