@@ -1,3 +1,4 @@
+
 import os
 import base64
 import requests
@@ -133,9 +134,11 @@ def payhero_callback():
     logging.info(f"Received Payhero callback: {data}")
 
     # Check for required fields in Payhero response
-    if not all(key in data for key in ('status', 'amount', 'phone_number')):
-        logging.error("Missing required fields in Payhero response")
-        return jsonify(success=False, message="Missing required fields in Payhero response")
+    required_fields = ['status', 'amount', 'phone_number']
+    missing_fields = [field for field in required_fields if field not in data]
+    if missing_fields:
+        logging.error(f"Missing required fields in Payhero response: {missing_fields}")
+        return jsonify(success=False, message=f"Missing required fields: {', '.join(missing_fields)}")
 
     status = data.get('status')
     amount = data.get('amount')
