@@ -104,15 +104,22 @@ def add_user_to_mikrotik(phone_number, package):
         password = phone_number[-4:]  # Last 4 digits as password
         profile = package.replace(" ", "_")  # Use package name for profile
 
-        # Add user to MikroTik Hotspot
-        api.get_resource('/ip/hotspot/user').add(
-            name=username,
-            password=password,
-            profile=profile,
-            comment=f"Auto-added {package}"
-        )
+        # Check if user already exists
+        users_resource = api.get_resource('/ip/hotspot/user')
+        existing_users = users_resource.get(name=username)
+        
+        if existing_users:
+            logging.warning(f"User {username} already exists in MikroTik.")
+        else:
+            # Add user to MikroTik Hotspot
+            users_resource.add(
+                name=username,
+                password=password,
+                profile=profile,
+                comment=f"Auto-added {package}"
+            )
+            logging.info(f"User {username} added to MikroTik with package {package}")
 
-        logging.info(f"User {username} added to MikroTik with package {package}")
         connection.disconnect()
         return True
 
