@@ -3,7 +3,7 @@ import base64
 import requests
 import logging
 import routeros_api  # MikroTik API
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, url_for
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -44,6 +44,9 @@ data_packages = {
     'data_6': ('1 MONTH UNLIMITED', 300)
 }
 
+# Dictionary to store pending payments
+pending_payments = {}
+
 # Route to display the captive portal page
 @app.route('/')
 def index():
@@ -79,11 +82,10 @@ def buy_package():
         logging.info(f"Response JSON: {response_json}")
 
         if response.status_code in [200, 201] and response_json.get('success'):
-            # Save the MAC address and package name for the callback
-            app.config['pending_payment'] = {
+            # Store pending payment details in dictionary
+            pending_payments[phone_number] = {
                 'mac_address': mac_address,
-                'package_name': package_name,
-                'phone_number': phone_number
+                'package_name': package_name
             }
             return jsonify(success=True, message="STK push sent successfully.")
         else:
@@ -139,19 +141,21 @@ def payhero_callback():
     phone_number = response.get('Source')
     amount = response.get('Amount')
 
-    pending_payment = app.config.get('pending_payment')
+    pending_payment = pending_payments.get(phone_number)
     if not pending_payment:
-        logging.error("No pending payment found.")
+        logging.error("No pending payment found for this phone number.")
         return jsonify(success=False, message="No pending payment found.")
 
     mac_address = pending_payment['mac_address']
     package_name = pending_payment['package_name']
 
-    if status and phone_number == pending_payment['phone_number']:
+    if status and phone_number == phone_number:
         logging.info(f"Payment successful for {phone_number}, package: {package_name}")
 
         # Add user to MikroTik Hotspot
         if add_user_to_mikrotik(mac_address, package_name):
+            # Remove from pending payments after successful activation
+            del pending_payments[phone_number]
             return jsonify(success=True, message="User activated successfully.")
         else:
             return jsonify(success=False, message="MikroTik activation failed.")
