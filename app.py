@@ -21,7 +21,8 @@ API_USERNAME = os.getenv('API_USERNAME')
 API_PASSWORD = os.getenv('API_PASSWORD')
 
 # MikroTik Credentials
-MIKROTIK_HOST = os.getenv('MIKROTIK_HOST')
+# Instead of using a public IP from env, use the WireGuard tunnel internal IP.
+MIKROTIK_HOST = "10.0.1.2"  # This is the internal IP assigned to MikroTik on the WireGuard tunnel (wg2)
 MIKROTIK_USERNAME = os.getenv('MIKROTIK_USERNAME')
 MIKROTIK_PASSWORD = os.getenv('MIKROTIK_PASSWORD')
 
