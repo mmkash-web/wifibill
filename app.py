@@ -23,7 +23,7 @@ API_PASSWORD = os.getenv('API_PASSWORD')
 # MikroTik Credentials
 # Instead of using the internal WireGuard IP (10.0.1.2),
 # we now connect to the VPS public IP (which forwards to MikroTik)
-MIKROTIK_HOST = "74.50.127.10"  # This is the VPS public IP
+MIKROTIK_HOST = "10.0.1.2"  # This is the VPS public IP
 MIKROTIK_USERNAME = os.getenv('MIKROTIK_USERNAME')
 MIKROTIK_PASSWORD = os.getenv('MIKROTIK_PASSWORD')
 
