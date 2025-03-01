@@ -4,5 +4,5 @@ python-dotenv
 gunicorn
 librouteros
 routeros-api
-pip freeze > requirements.txt
+Gunicorn
 
